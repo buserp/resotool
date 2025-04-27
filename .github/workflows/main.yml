@@ -26,7 +26,7 @@ jobs:
           p12-password: ${{ secrets.DEV_ID_APP_CERT_PASSWORD }}
       - name: Bundle resotool (macOS)
         if: matrix.os == 'macos-latest'
-        run: rustup target add aarch64-apple-darwin && cargo xtask bundle-universal resotool --release
+        run: rustup target add aarch64-apple-darwin && rustup target add x86_64-apple-darwin && cargo xtask bundle-universal resotool --release
       - name: Codesign resotool (macOS)
         if: matrix.os == 'macos-latest'
         run: codesign --force -s "${{ secrets.DEV_ID_APP}}" -v ./target/bundled/Resotool.vst3 --deep --strict --options=runtime --timestamp
