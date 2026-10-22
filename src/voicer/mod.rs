@@ -97,8 +97,8 @@ impl Voicer {
                 * ((var(&voice.bandwidth) | var(&voice.cutoff))
                     >> map(|f: &Frame<f32, U2>| f[0] / f[1]))
         });
-        // The filterbank has unity peak gain, so broadband input comes out much quieter. Makeup gain
-        // brings it back up, and the soft clipper keeps loud in-tune input from hard clipping.
+        // The filterbank has unity peak gain, so broadband input comes out much quieter
+        // Makeup gain brings it back up, and the soft clipper gently shapes it
         let wet = ((split() >> filterbank) * var(&makeup) >> shape(Tanh(1.0))) * var(&wetdry);
         let dry = pass() * var_fn(&wetdry, |wd| 1.0 - wd);
         let audio = Box::new(wet & dry);
