@@ -11,12 +11,14 @@ pub struct Voicer {
     last_played: u32,
     voices: Box<[Voice; NUM_VOICES]>,
     wetdry: Shared,
+    makeup: Shared,
     voices_sounding: Shared,
     pub audio: Box<dyn AudioUnit>,
 }
 
 pub struct VoicerParams {
     pub wetdry: f32,
+    pub makeup: f32,
     pub bandwidth: f32,
     pub attack: f32,
     pub decay: f32,
@@ -32,6 +34,7 @@ impl Voicer {
 
     pub fn update(&self, params: VoicerParams) {
         self.wetdry.set(params.wetdry);
+        self.makeup.set(params.makeup);
         for voice in self.voices.iter() {
             voice.bandwidth.set(params.bandwidth);
             voice.adsr.attack.set(params.attack);
@@ -74,6 +77,7 @@ impl Voicer {
         let voices: [Voice; NUM_VOICES] = std::array::from_fn(|_| Voice::default());
         let voices_sounding: Shared = Shared::new(0.0);
         let wetdry = Shared::new(1.0);
+        let makeup = Shared::new(1.0);
         let filterbank = sumi::<VoiceSize, _, _>(|i| {
             let voice = &voices[i as usize];
             (pass()
@@ -85,12 +89,17 @@ impl Voicer {
                         voice.adsr.release.clone(),
                     )))
                 | var(&voice.cutoff)
-                // The resonator takes Q rather than bandwidth in Hz
+                // The bandpass takes Q rather than bandwidth in Hz
                 | ((var(&voice.cutoff) | var(&voice.bandwidth))
                     >> map(|f: &Frame<f32, U2>| f[0] / f[1])))
-                >> resonator()
+                >> bandpass()
+                // The bandpass peaks at Q, so scale by 1 / Q for unity gain at the center
+                * ((var(&voice.bandwidth) | var(&voice.cutoff))
+                    >> map(|f: &Frame<f32, U2>| f[0] / f[1]))
         });
-        let wet = (split() >> filterbank) * var(&wetdry);
+        // The filterbank has unity peak gain, so broadband input comes out much quieter. Makeup gain
+        // brings it back up, and the soft clipper keeps loud in-tune input from hard clipping.
+        let wet = ((split() >> filterbank) * var(&makeup) >> shape(Tanh(1.0))) * var(&wetdry);
         let dry = pass() * var_fn(&wetdry, |wd| 1.0 - wd);
         let audio = Box::new(wet & dry);
         Self {
@@ -99,6 +108,7 @@ impl Voicer {
             voices: Box::new(voices),
             voices_sounding,
             wetdry,
+            makeup,
         }
     }
 }

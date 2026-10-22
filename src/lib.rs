@@ -26,6 +26,8 @@ struct ResotoolParams {
     pub release: FloatParam,
     #[id = "wetdry"]
     pub wetdry: FloatParam,
+    #[id = "makeup"]
+    pub makeup: FloatParam,
 }
 
 impl Default for Resotool {
@@ -79,6 +81,15 @@ impl Default for ResotoolParams {
                 .with_unit("%")
                 .with_value_to_string(formatters::v2s_f32_percentage(0))
                 .with_string_to_value(formatters::s2v_f32_percentage()),
+            // Stored as linear gain, displayed in decibels
+            makeup: FloatParam::new(
+                "Makeup",
+                util::db_to_gain(24.0),
+                FloatRange::gain_range(0.0, 48.0),
+            )
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_gain_to_db(1))
+            .with_string_to_value(formatters::s2v_f32_gain_to_db()),
         }
     }
 }
@@ -154,6 +165,7 @@ impl Plugin for Resotool {
     ) -> ProcessStatus {
         let voicer_params = VoicerParams {
             wetdry: self.params.wetdry.value(),
+            makeup: self.params.makeup.value(),
             bandwidth: self.params.bandwidth.value(),
             attack: self.params.attack.value(),
             decay: self.params.decay.value(),
