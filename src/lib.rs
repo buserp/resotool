@@ -38,35 +38,47 @@ impl Default for Resotool {
     }
 }
 
-fn adsr_param(name: &str) -> FloatParam {
+fn adsr_param(name: &str, default: f32) -> FloatParam {
     FloatParam::new(
         name,
-        1.0,
+        default,
         FloatRange::Skewed {
             min: 0.0,
             max: 10.0,
             factor: 0.5,
         },
     )
+    .with_unit("seconds")
+    .with_step_size(0.01)
+    .with_value_to_string(formatters::v2s_f32_rounded(2))
 }
 
 impl Default for ResotoolParams {
     fn default() -> Self {
         Self {
             bandwidth: FloatParam::new(
-                "Bandwidth (Hz)",
+                "Bandwidth",
                 10.0,
                 FloatRange::Skewed {
-                    min: 1.0,
-                    max: 100.0,
+                    min: 0.1,
+                    max: 15.0,
                     factor: 0.5,
                 },
-            ),
-            attack: adsr_param("Attack (seconds)"),
-            decay: adsr_param("Decay (seconds)"),
-            sustain: FloatParam::new("Sustain", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 }),
-            release: adsr_param("Release (seconds)"),
-            wetdry: FloatParam::new("Wet/Dry", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 }),
+            )
+            .with_step_size(0.01)
+            .with_value_to_string(formatters::v2s_f32_rounded(2))
+            .with_unit("Hz"),
+            attack: adsr_param("Attack", 0.5),
+            decay: adsr_param("Decay", 0.25),
+            sustain: FloatParam::new("Sustain", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
+            release: adsr_param("Release", 0.75),
+            wetdry: FloatParam::new("Wet/Dry", 0.75, FloatRange::Linear { min: 0.0, max: 1.0 })
+                .with_unit("%")
+                .with_value_to_string(formatters::v2s_f32_percentage(0))
+                .with_string_to_value(formatters::s2v_f32_percentage()),
         }
     }
 }
