@@ -1,5 +1,5 @@
-use fundsp::hacker32::*;
-use nih_plug::util::midi_note_to_freq;
+use fundsp::prelude32::*;
+use nice_plug::util::midi_key_to_freq;
 
 mod adsr;
 
@@ -10,9 +10,9 @@ type VoiceSize = U8;
 pub struct Voicer {
     last_played: u32,
     voices: Box<[Voice; NUM_VOICES]>,
-    wetdry: Shared<f32>,
-    voices_sounding: Shared<f32>,
-    pub audio: Box<dyn AudioUnit32>,
+    wetdry: Shared,
+    voices_sounding: Shared,
+    pub audio: Box<dyn AudioUnit>,
 }
 
 pub struct VoicerParams {
@@ -72,9 +72,9 @@ impl Voicer {
 
     pub fn new() -> Self {
         let voices: [Voice; NUM_VOICES] = std::array::from_fn(|_| Voice::default());
-        let voices_sounding: Shared<f32> = Shared::new(0.0);
+        let voices_sounding: Shared = Shared::new(0.0);
         let wetdry = Shared::new(1.0);
-        let filterbank = sum::<VoiceSize, _, _>(|i| {
+        let filterbank = sumi::<VoiceSize, _, _>(|i| {
             let voice = &voices[i as usize];
             (pass()
                 * (var(&voice.trigger)
@@ -85,7 +85,9 @@ impl Voicer {
                         voice.adsr.release.clone(),
                     )))
                 | var(&voice.cutoff)
-                | var(&voice.bandwidth))
+                // The resonator takes Q rather than bandwidth in Hz
+                | ((var(&voice.cutoff) | var(&voice.bandwidth))
+                    >> map(|f: &Frame<f32, U2>| f[0] / f[1])))
                 >> resonator()
         });
         let wet = (split() >> filterbank) * var(&wetdry);
@@ -105,10 +107,10 @@ struct Voice {
     last_played: u32,
     note: u8,
     sounding: bool,
-    trigger: Shared<f32>,
+    trigger: Shared,
     adsr: adsr::Adsr,
-    cutoff: Shared<f32>,
-    bandwidth: Shared<f32>,
+    cutoff: Shared,
+    bandwidth: Shared,
 }
 
 impl Default for Voice {
@@ -130,7 +132,7 @@ impl Voice {
         self.trigger.set(1.0);
         self.note = midi_note;
         self.sounding = true;
-        self.cutoff.set(midi_note_to_freq(midi_note));
+        self.cutoff.set(midi_key_to_freq(midi_note));
         self.last_played = last_played;
     }
 

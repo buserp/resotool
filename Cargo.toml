@@ -1,7 +1,7 @@
 [package]
 name = "resotool"
 version = "0.3.1"
-edition = "2021"
+edition = "2024"
 authors = ["Paul Buser <paul@beepyversion.com>"]
 license = "GPL-3.0-or-later"
 homepage = "https://beepyversion.com"
@@ -14,8 +14,12 @@ members = ["xtask"]
 crate-type = ["cdylib"]
 
 [dependencies]
-fundsp = "0.16.0"
-nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["assert_process_allocs"] }
+fundsp = "0.23.0"
+nice-plug = { version = "0.4.2", default-features = false, features = [
+    "vst3",
+    "tracing-subscriber",
+    "assert_process_allocs",
+] }
 
 [profile.release]
 lto = "thin"

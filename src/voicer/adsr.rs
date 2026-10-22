@@ -1,12 +1,10 @@
-use fundsp::prelude::{clamp01, envelope2, lerp, shared, var, An, EnvelopeIn, Frame, U1};
-use fundsp::shared::{Atomic, Shared};
-use fundsp::Float;
+use fundsp::prelude32::{An, EnvelopeIn, Frame, Shared, U1, clamp01, envelope2, lerp, shared, var};
 
 pub struct Adsr {
-    pub attack: Shared<f32>,
-    pub decay: Shared<f32>,
-    pub sustain: Shared<f32>,
-    pub release: Shared<f32>,
+    pub attack: Shared,
+    pub decay: Shared,
+    pub sustain: Shared,
+    pub release: Shared,
 }
 
 impl Default for Adsr {
@@ -20,68 +18,49 @@ impl Default for Adsr {
     }
 }
 
-pub fn adsr_shared<F: Float + Atomic>(
-    attack: Shared<F>,
-    decay: Shared<F>,
-    sustain: Shared<F>,
-    release: Shared<F>,
-) -> An<EnvelopeIn<F, F, impl Fn(F, &Frame<F, U1>) -> F + Sized + Clone, U1, F>> {
-    let neg1 = F::from_f64(-1.0);
-    let zero = F::from_f64(0.0);
-    let a = shared(neg1);
-    let b = shared(neg1);
+pub fn adsr_shared(
+    attack: Shared,
+    decay: Shared,
+    sustain: Shared,
+    release: Shared,
+) -> An<EnvelopeIn<f32, impl FnMut(f32, &Frame<f32, U1>) -> f32 + Clone, U1, f32>> {
+    let a = shared(-1.0);
+    let b = shared(-1.0);
     let attack_start = var(&a);
     let release_start = var(&b);
     envelope2(move |time, control| {
-        if attack_start.value() < zero && control > zero {
+        if attack_start.value() < 0.0 && control > 0.0 {
             attack_start.set_value(time);
-            release_start.set_value(neg1);
-        } else if release_start.value() < zero && control <= zero {
+            release_start.set_value(-1.0);
+        } else if release_start.value() < 0.0 && control <= 0.0 {
             release_start.set_value(time);
-            attack_start.set_value(neg1);
+            attack_start.set_value(-1.0);
         }
-        clamp01(if release_start.value() < zero {
-            ads(
-                attack.clone(),
-                decay.clone(),
-                sustain.clone(),
-                time - attack_start.value(),
-            )
+        clamp01(if release_start.value() < 0.0 {
+            ads(&attack, &decay, &sustain, time - attack_start.value())
         } else {
-            releasing(
-                sustain.clone(),
-                release.clone(),
-                time - release_start.value(),
-            )
+            releasing(&sustain, &release, time - release_start.value())
         })
     })
 }
 
-fn ads<F: Float + Atomic>(attack: Shared<F>, decay: Shared<F>, sustain: Shared<F>, time: F) -> F {
+fn ads(attack: &Shared, decay: &Shared, sustain: &Shared, time: f32) -> f32 {
     if time < attack.value() {
-        lerp(F::from_f64(0.0), F::from_f64(1.0), time / attack.value())
+        lerp(0.0, 1.0, time / attack.value())
     } else {
         let decay_time = time - attack.value();
         if decay_time < decay.value() {
-            lerp(
-                F::from_f64(1.0),
-                sustain.value(),
-                decay_time / decay.value(),
-            )
+            lerp(1.0, sustain.value(), decay_time / decay.value())
         } else {
             sustain.value()
         }
     }
 }
 
-fn releasing<F: Float + Atomic>(sustain: Shared<F>, release: Shared<F>, release_time: F) -> F {
+fn releasing(sustain: &Shared, release: &Shared, release_time: f32) -> f32 {
     if release_time > release.value() {
-        F::from_f64(0.0)
+        0.0
     } else {
-        lerp(
-            sustain.value(),
-            F::from_f64(0.0),
-            release_time / release.value(),
-        )
+        lerp(sustain.value(), 0.0, release_time / release.value())
     }
 }

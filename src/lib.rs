@@ -1,4 +1,5 @@
-use nih_plug::prelude::{Buffer, *};
+use nice_plug::midi::Key;
+use nice_plug::prelude::*;
 use std::sync::Arc;
 use voicer::{Voicer, VoicerParams};
 
@@ -23,7 +24,7 @@ struct ResotoolParams {
     pub sustain: FloatParam,
     #[id = "release"]
     pub release: FloatParam,
-    #[id = "wetdry" ]
+    #[id = "wetdry"]
     pub wetdry: FloatParam,
 }
 
@@ -98,6 +99,8 @@ impl Plugin for Resotool {
 
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
 
+    // Plugins without an editor set this to `()`.
+    type Editor = ();
     // If the plugin can send or receive SysEx messages, it can define a type to wrap around those
     // messages here. The type implements the `SysExMessage` trait, which allows conversion to and
     // from plain byte buffers.
@@ -111,11 +114,11 @@ impl Plugin for Resotool {
         self.params.clone()
     }
 
-    fn initialize(
+    fn activate(
         &mut self,
         _audio_io_layout: &AudioIOLayout,
         _buffer_config: &BufferConfig,
-        _context: &mut impl InitContext<Self>,
+        _context: &mut impl ActivateContext<Self>,
     ) -> bool {
         // Resize buffers and perform other potentially expensive initialization operations here.
         // The `reset()` function is always called right after this function. You can remove this
@@ -148,10 +151,16 @@ impl Plugin for Resotool {
         self.voicer.update(voicer_params);
         while let Some(event) = context.next_event() {
             match event {
-                NoteEvent::NoteOn { note, .. } => {
+                NoteEvent::NoteOn {
+                    key: Key::Number(note),
+                    ..
+                } => {
                     self.voicer.note_on(note);
                 }
-                NoteEvent::NoteOff { note, .. } => {
+                NoteEvent::NoteOff {
+                    key: Key::Number(note),
+                    ..
+                } => {
                     self.voicer.note_off(note);
                 }
                 _ => (),
@@ -188,5 +197,5 @@ impl Vst3Plugin for Resotool {
         &[Vst3SubCategory::Fx, Vst3SubCategory::Dynamics];
 }
 
-nih_export_clap!(Resotool);
-nih_export_vst3!(Resotool);
+nice_export_clap!(Resotool);
+nice_export_vst3!(Resotool);
