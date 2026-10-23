@@ -1,13 +1,13 @@
 use nice_plug::midi::Key;
 use nice_plug::prelude::*;
+use processor::{Processor, ProcessorParams};
 use std::sync::Arc;
-use voicer::{Voicer, VoicerParams};
 
-mod voicer;
+mod processor;
 
 struct Resotool {
     params: Arc<ResotoolParams>,
-    voicer: Voicer,
+    processor: Processor,
 }
 
 #[derive(Params)]
@@ -34,7 +34,7 @@ impl Default for Resotool {
     fn default() -> Self {
         Self {
             params: Arc::new(ResotoolParams::default()),
-            voicer: Voicer::new(),
+            processor: Processor::new(),
         }
     }
 }
@@ -145,7 +145,7 @@ impl Plugin for Resotool {
         // Resize buffers and perform other potentially expensive initialization operations here.
         // The `reset()` function is always called right after this function. You can remove this
         // function if you do not need it.
-        self.voicer
+        self.processor
             .audio
             .set_sample_rate(_buffer_config.sample_rate.into());
         true
@@ -162,7 +162,7 @@ impl Plugin for Resotool {
         _aux: &mut AuxiliaryBuffers,
         context: &mut impl ProcessContext<Self>,
     ) -> ProcessStatus {
-        let voicer_params = VoicerParams {
+        let processor_params = ProcessorParams {
             wetdry: self.params.wetdry.value(),
             makeup: self.params.makeup.value(),
             bandwidth: self.params.bandwidth.value(),
@@ -171,20 +171,20 @@ impl Plugin for Resotool {
             sustain: self.params.sustain.value(),
             release: self.params.release.value(),
         };
-        self.voicer.update(voicer_params);
+        self.processor.update(processor_params);
         while let Some(event) = context.next_event() {
             match event {
                 NoteEvent::NoteOn {
                     key: Key::Number(note),
                     ..
                 } => {
-                    self.voicer.note_on(note);
+                    self.processor.note_on(note);
                 }
                 NoteEvent::NoteOff {
                     key: Key::Number(note),
                     ..
                 } => {
-                    self.voicer.note_off(note);
+                    self.processor.note_off(note);
                 }
                 _ => (),
             }
@@ -193,7 +193,7 @@ impl Plugin for Resotool {
             // Smoothing is optionally built into the parameters themselves
             let output_buffer = &mut [0f32; 1];
             for sample in channel_samples {
-                self.voicer.audio.tick(&[*sample], output_buffer);
+                self.processor.audio.tick(&[*sample], output_buffer);
                 *sample = output_buffer[0];
             }
         }

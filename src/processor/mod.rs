@@ -7,7 +7,7 @@ mod adsr;
 const NUM_VOICES: usize = 8;
 type VoiceSize = U8;
 
-pub struct Voicer {
+pub struct Processor {
     /// Note event counter, for voice age
     clock: u32,
     voices: Box<[Voice; NUM_VOICES]>,
@@ -19,7 +19,7 @@ pub struct Voicer {
     pub audio: Box<dyn AudioUnit>,
 }
 
-pub struct VoicerParams {
+pub struct ProcessorParams {
     pub wetdry: f32,
     pub makeup: f32,
     pub bandwidth: f32,
@@ -29,8 +29,8 @@ pub struct VoicerParams {
     pub release: f32,
 }
 
-impl Voicer {
-    pub fn update(&self, params: VoicerParams) {
+impl Processor {
+    pub fn update(&self, params: ProcessorParams) {
         self.wetdry.set(params.wetdry);
         self.makeup.set(params.makeup);
         self.bandwidth.set(params.bandwidth);
