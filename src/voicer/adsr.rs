@@ -1,7 +1,7 @@
-use fundsp::prelude32::{An, AudioNode, Shared, U1, clamp01, lerp};
-// 64-bit envelope2: an f32 clock stops advancing after ~512 s at 48 kHz
-use fundsp::prelude64::envelope2;
+use fundsp::DEFAULT_SR;
+use fundsp::prelude32::{An, AudioNode, Frame, Shared, U1};
 
+#[derive(Clone)]
 pub struct Adsr {
     pub attack: Shared,
     pub decay: Shared,
@@ -20,62 +20,100 @@ impl Default for Adsr {
     }
 }
 
-pub fn adsr_shared(
-    attack: Shared,
-    decay: Shared,
-    sustain: Shared,
-    release: Shared,
-) -> An<impl AudioNode<Inputs = U1, Outputs = U1>> {
-    // Stage start times, `None` if inactive. Both `None` = idle/silent
-    let mut attack_start: Option<f64> = None;
-    let mut release_start: Option<f64> = None;
-    // Level at note off, release fades from here
-    let mut release_level = 0.0;
-    envelope2(move |time, control| {
-        // Elapsed times are short, f32 is plenty
-        let since = |start: f64| (time - start) as f32;
-        match attack_start {
-            None if control > 0.0 => {
-                // Resume attack from current level by backdating its start (avoids retrigger click)
-                let level = release_start.map_or(0.0, |start| {
-                    clamp01(releasing(release_level, &release, since(start)))
-                });
-                attack_start = Some(time - f64::from(attack.value() * level));
-                release_start = None;
-            }
-            Some(start) if control <= 0.0 => {
-                // Key up: save current level
-                release_level = clamp01(ads(&attack, &decay, &sustain, since(start)));
-                release_start = Some(time);
-                attack_start = None;
-            }
-            _ => {}
-        }
-        f64::from(clamp01(match (attack_start, release_start) {
-            (Some(start), _) => ads(&attack, &decay, &sustain, since(start)),
-            (None, Some(start)) => releasing(release_level, &release, since(start)),
-            (None, None) => 0.0,
-        }))
+/// ADSR envelope. Input: gate (> 0 = held). Output: level in [0, 1]
+pub fn adsr_shared(params: Adsr) -> An<AdsrNode> {
+    An(AdsrNode {
+        params,
+        stage: Stage::Idle,
+        level: 0.0,
+        release_from: 0.0,
+        sample_rate: DEFAULT_SR as f32,
     })
 }
 
-fn ads(attack: &Shared, decay: &Shared, sustain: &Shared, time: f32) -> f32 {
-    if time < attack.value() {
-        lerp(0.0, 1.0, time / attack.value())
-    } else {
-        let decay_time = time - attack.value();
-        if decay_time < decay.value() {
-            lerp(1.0, sustain.value(), decay_time / decay.value())
-        } else {
-            sustain.value()
+#[derive(Clone, Copy, PartialEq)]
+enum Stage {
+    Idle,
+    Attack,
+    Decay,
+    Sustain,
+    Release,
+}
+
+#[derive(Clone)]
+pub struct AdsrNode {
+    params: Adsr,
+    stage: Stage,
+    level: f32,
+    // Level at note off, so Release is always the full fade time
+    release_from: f32,
+    sample_rate: f32,
+}
+
+impl AudioNode for AdsrNode {
+    const ID: u64 = 0x5245_534f_4144_5352;
+    type Inputs = U1;
+    type Outputs = U1;
+
+    fn reset(&mut self) {
+        self.stage = Stage::Idle;
+        self.level = 0.0;
+    }
+
+    fn set_sample_rate(&mut self, sample_rate: f64) {
+        self.sample_rate = sample_rate as f32;
+    }
+
+    #[inline]
+    fn tick(&mut self, input: &Frame<f32, Self::Inputs>) -> Frame<f32, Self::Outputs> {
+        let held = input[0] > 0.0;
+        // Stages continue from the current level, so retrigger and early release don't jump
+        match self.stage {
+            Stage::Idle | Stage::Release if held => self.stage = Stage::Attack,
+            Stage::Attack | Stage::Decay | Stage::Sustain if !held => {
+                self.release_from = self.level;
+                self.stage = Stage::Release;
+            }
+            _ => {}
         }
+
+        let sustain = self.params.sustain.value();
+        match self.stage {
+            Stage::Idle => self.level = 0.0,
+            Stage::Attack => {
+                self.level += self.step(1.0, self.params.attack.value());
+                if self.level >= 1.0 {
+                    self.level = 1.0;
+                    self.stage = Stage::Decay;
+                }
+            }
+            Stage::Decay => {
+                self.level -= self.step(1.0 - sustain, self.params.decay.value());
+                if self.level <= sustain {
+                    self.level = sustain;
+                    self.stage = Stage::Sustain;
+                }
+            }
+            Stage::Sustain => self.level = sustain,
+            Stage::Release => {
+                self.level -= self.step(self.release_from, self.params.release.value());
+                if self.level <= 0.0 {
+                    self.level = 0.0;
+                    self.stage = Stage::Idle;
+                }
+            }
+        }
+        [self.level].into()
     }
 }
 
-fn releasing(level: f32, release: &Shared, release_time: f32) -> f32 {
-    if release_time >= release.value() {
-        0.0
-    } else {
-        lerp(level, 0.0, release_time / release.value())
+impl AdsrNode {
+    /// Per-sample change to cover `distance` in `seconds`, all of it at once if `seconds` is 0
+    fn step(&self, distance: f32, seconds: f32) -> f32 {
+        if seconds > 0.0 {
+            distance / (seconds * self.sample_rate)
+        } else {
+            distance
+        }
     }
 }

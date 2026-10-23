@@ -32,9 +32,8 @@ struct ResotoolParams {
 
 impl Default for Resotool {
     fn default() -> Self {
-        let params = ResotoolParams::default();
         Self {
-            params: Arc::new(params),
+            params: Arc::new(ResotoolParams::default()),
             voicer: Voicer::new(),
         }
     }

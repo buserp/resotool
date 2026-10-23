@@ -13,6 +13,9 @@ pub struct Voicer {
     voices: Box<[Voice; NUM_VOICES]>,
     wetdry: Shared,
     makeup: Shared,
+    // Shared by all voices
+    bandwidth: Shared,
+    adsr: adsr::Adsr,
     pub audio: Box<dyn AudioUnit>,
 }
 
@@ -30,13 +33,11 @@ impl Voicer {
     pub fn update(&self, params: VoicerParams) {
         self.wetdry.set(params.wetdry);
         self.makeup.set(params.makeup);
-        for voice in self.voices.iter() {
-            voice.bandwidth.set(params.bandwidth);
-            voice.adsr.attack.set(params.attack);
-            voice.adsr.decay.set(params.decay);
-            voice.adsr.sustain.set(params.sustain);
-            voice.adsr.release.set(params.release);
-        }
+        self.bandwidth.set(params.bandwidth);
+        self.adsr.attack.set(params.attack);
+        self.adsr.decay.set(params.decay);
+        self.adsr.sustain.set(params.sustain);
+        self.adsr.release.set(params.release);
     }
 
     pub fn note_on(&mut self, midi_note: u8) {
@@ -74,23 +75,20 @@ impl Voicer {
         let voices: [Voice; NUM_VOICES] = std::array::from_fn(|_| Voice::default());
         let wetdry = Shared::new(1.0);
         let makeup = Shared::new(1.0);
+        let bandwidth = Shared::new(100.0);
+        let adsr = adsr::Adsr::default();
         let filterbank = sumi::<VoiceSize, _, _>(|i| {
             let voice = &voices[i as usize];
             (pass()
                 * (var(&voice.trigger)
-                    >> (adsr::adsr_shared(
-                        voice.adsr.attack.clone(),
-                        voice.adsr.decay.clone(),
-                        voice.adsr.sustain.clone(),
-                        voice.adsr.release.clone(),
-                    )))
+                    >> adsr::adsr_shared(adsr.clone()))
                 | var(&voice.cutoff)
                 // The bandpass takes Q rather than bandwidth in Hz
-                | ((var(&voice.cutoff) | var(&voice.bandwidth))
+                | ((var(&voice.cutoff) | var(&bandwidth))
                     >> map(|f: &Frame<f32, U2>| f[0] / f[1])))
                 >> bandpass()
                 // The bandpass peaks at Q, so scale by 1 / Q for unity gain at the center
-                * ((var(&voice.bandwidth) | var(&voice.cutoff))
+                * ((var(&bandwidth) | var(&voice.cutoff))
                     >> map(|f: &Frame<f32, U2>| f[0] / f[1]))
         });
         // The filterbank has unity peak gain, so broadband input comes out much quieter
@@ -104,6 +102,8 @@ impl Voicer {
             voices: Box::new(voices),
             wetdry,
             makeup,
+            bandwidth,
+            adsr,
         }
     }
 }
@@ -115,9 +115,7 @@ struct Voice {
     note: Option<u8>,
     sounding: bool,
     trigger: Shared,
-    adsr: adsr::Adsr,
     cutoff: Shared,
-    bandwidth: Shared,
 }
 
 impl Default for Voice {
@@ -129,8 +127,6 @@ impl Default for Voice {
             sounding: false,
             trigger: Shared::new(0.0),
             cutoff: Shared::new(440.0),
-            bandwidth: Shared::new(100.0),
-            adsr: adsr::Adsr::default(),
         }
     }
 }
