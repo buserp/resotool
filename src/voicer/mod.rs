@@ -8,11 +8,11 @@ const NUM_VOICES: usize = 8;
 type VoiceSize = U8;
 
 pub struct Voicer {
-    last_played: u32,
+    /// Note event counter, for voice age
+    clock: u32,
     voices: Box<[Voice; NUM_VOICES]>,
     wetdry: Shared,
     makeup: Shared,
-    voices_sounding: Shared,
     pub audio: Box<dyn AudioUnit>,
 }
 
@@ -27,11 +27,6 @@ pub struct VoicerParams {
 }
 
 impl Voicer {
-    fn modify_voices_sounding(&self, diff: f32) {
-        let voices_sounding = self.voices_sounding.value();
-        self.voices_sounding.set(voices_sounding + diff);
-    }
-
     pub fn update(&self, params: VoicerParams) {
         self.wetdry.set(params.wetdry);
         self.makeup.set(params.makeup);
@@ -45,37 +40,38 @@ impl Voicer {
     }
 
     pub fn note_on(&mut self, midi_note: u8) {
-        self.last_played += 1;
-        for i in 0..NUM_VOICES {
-            if !(self.voices[i].sounding) {
-                self.voices[i].note_on(midi_note, self.last_played);
-                self.modify_voices_sounding(1.0);
-                return;
-            }
-        }
-        // All voices are sounding, interrupt the last-used voice
-        let mut voice_index: usize = 0;
-        for i in 0..NUM_VOICES {
-            if self.voices[i].last_played < self.voices[voice_index].last_played {
-                voice_index = i;
-            }
-        }
-        self.voices[voice_index].note_on(midi_note, self.last_played);
-        self.modify_voices_sounding(1.0);
+        self.clock += 1;
+        let voices = &self.voices;
+        let index = voices
+            .iter()
+            // Reuse voice already on this note
+            .position(|voice| voice.note == Some(midi_note))
+            // Else free voice released longest ago (quietest tail)
+            .or_else(|| {
+                (0..NUM_VOICES)
+                    .filter(|&i| !voices[i].sounding)
+                    .min_by_key(|&i| voices[i].last_released)
+            })
+            // Else steal oldest held voice
+            .unwrap_or_else(|| {
+                (0..NUM_VOICES)
+                    .min_by_key(|&i| voices[i].last_played)
+                    .expect("Voices is not empty")
+            });
+        self.voices[index].note_on(midi_note, self.clock);
     }
 
     pub fn note_off(&mut self, midi_note: u8) {
-        for i in 0..NUM_VOICES {
-            if self.voices[i].note == midi_note {
-                self.voices[i].note_off(midi_note);
-                self.modify_voices_sounding(-1.0);
+        self.clock += 1;
+        for voice in self.voices.iter_mut() {
+            if voice.sounding && voice.note == Some(midi_note) {
+                voice.note_off(self.clock);
             }
         }
     }
 
     pub fn new() -> Self {
         let voices: [Voice; NUM_VOICES] = std::array::from_fn(|_| Voice::default());
-        let voices_sounding: Shared = Shared::new(0.0);
         let wetdry = Shared::new(1.0);
         let makeup = Shared::new(1.0);
         let filterbank = sumi::<VoiceSize, _, _>(|i| {
@@ -104,9 +100,8 @@ impl Voicer {
         let audio = Box::new(wet & dry);
         Self {
             audio,
-            last_played: 0,
+            clock: 0,
             voices: Box::new(voices),
-            voices_sounding,
             wetdry,
             makeup,
         }
@@ -115,7 +110,9 @@ impl Voicer {
 
 struct Voice {
     last_played: u32,
-    note: u8,
+    last_released: u32,
+    /// Current note, `None` if never played
+    note: Option<u8>,
     sounding: bool,
     trigger: Shared,
     adsr: adsr::Adsr,
@@ -127,7 +124,8 @@ impl Default for Voice {
     fn default() -> Self {
         Self {
             last_played: 0,
-            note: 64,
+            last_released: 0,
+            note: None,
             sounding: false,
             trigger: Shared::new(0.0),
             cutoff: Shared::new(440.0),
@@ -140,14 +138,15 @@ impl Default for Voice {
 impl Voice {
     fn note_on(&mut self, midi_note: u8, last_played: u32) {
         self.trigger.set(1.0);
-        self.note = midi_note;
+        self.note = Some(midi_note);
         self.sounding = true;
         self.cutoff.set(midi_key_to_freq(midi_note));
         self.last_played = last_played;
     }
 
-    fn note_off(&mut self, _midi_note: u8) {
+    fn note_off(&mut self, last_released: u32) {
         self.trigger.set(0.0);
         self.sounding = false;
+        self.last_released = last_released;
     }
 }

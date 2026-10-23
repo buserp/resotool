@@ -46,7 +46,8 @@ fn install_vst3_bundles(bundled_dir: &Path) -> io::Result<()> {
             continue;
         }
 
-        let destination = install_dir.join(bundle.file_name().unwrap());
+        let destination =
+            install_dir.join(bundle.file_name().expect("Bundle path doesn't end in .."));
         if destination.exists() {
             fs::remove_dir_all(&destination)?;
         }
