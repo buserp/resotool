@@ -1,10 +1,11 @@
 # Resotool
 
 Resotool contains 8 MIDI-controllable resonators.
+## [Download Resotool](https://github.com/buserp/resotool/releases/tag/v1.0.0)
 
 ![A screenshot of Resotool](resotool_screenshot.png)
 
-## Building
+## Building from source
 After installing [Rust](https://rustup.rs/), you can compile Resotool as follows:
 
 ```shell
