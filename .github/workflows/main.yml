@@ -23,13 +23,13 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Read Version
         shell: bash
         run: echo "VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "resotool") | .version')" >> "$GITHUB_ENV"
       - name: Import Certificates
         if: matrix.os == 'macos-latest'
-        uses: apple-actions/import-codesign-certs@v2
+        uses: apple-actions/import-codesign-certs@v7
         with: 
           p12-file-base64: ${{ secrets.DEV_ID_APP_CERT }}
           p12-password: ${{ secrets.DEV_ID_APP_CERT_PASSWORD }}
@@ -43,7 +43,7 @@ jobs:
         if: matrix.os != 'macos-latest'
         run: cargo xtask bundle resotool --release
       - name: Create Artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: resotool_${{ matrix.platform }}_${{ env.VERSION }}
           path: ./target/bundled
