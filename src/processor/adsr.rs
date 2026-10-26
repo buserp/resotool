@@ -1,5 +1,7 @@
+use super::meter::VoiceMeter;
 use fundsp::DEFAULT_SR;
 use fundsp::prelude32::{An, AudioNode, Frame, Shared, U1};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct Adsr {
@@ -21,9 +23,10 @@ impl Default for Adsr {
 }
 
 /// ADSR envelope. Input: gate (> 0 = held). Output: level in [0, 1]
-pub fn adsr_shared(params: Adsr) -> An<AdsrNode> {
+pub fn adsr_shared(params: Adsr, meter: Arc<VoiceMeter>) -> An<AdsrNode> {
     An(AdsrNode {
         params,
+        meter,
         stage: Stage::Idle,
         level: 0.0,
         release_from: 0.0,
@@ -32,7 +35,8 @@ pub fn adsr_shared(params: Adsr) -> An<AdsrNode> {
 }
 
 #[derive(Clone, Copy, PartialEq)]
-enum Stage {
+#[repr(u8)]
+pub enum Stage {
     Idle,
     Attack,
     Decay,
@@ -40,9 +44,22 @@ enum Stage {
     Release,
 }
 
+impl From<u8> for Stage {
+    fn from(other: u8) -> Stage {
+        match other {
+            1 => Stage::Attack,
+            2 => Stage::Decay,
+            3 => Stage::Sustain,
+            4 => Stage::Release,
+            _ => Stage::Idle,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct AdsrNode {
     params: Adsr,
+    meter: Arc<VoiceMeter>,
     stage: Stage,
     level: f32,
     // Level at note off, so Release is always the full fade time
@@ -103,6 +120,7 @@ impl AudioNode for AdsrNode {
                 }
             }
         }
+        self.meter.set_envelope(self.level, self.stage);
         [self.level].into()
     }
 }

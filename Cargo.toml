@@ -20,7 +20,10 @@ nice-plug = { version = "0.4.2", default-features = false, features = [
     "tracing-subscriber",
     "assert_process_allocs",
     "unsafe_flush_denormals",
+    "editor",
 ] }
+nice-plug-egui = "0.5.0"
+egui = { version = "0.36.1", features = ["default_fonts"] }
 
 [profile.release]
 lto = "thin"

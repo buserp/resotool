@@ -1,13 +1,20 @@
+use editor::ResotoolEditor;
 use nice_plug::midi::Key;
 use nice_plug::prelude::*;
+use nice_plug_egui::{EguiEditor, EguiEditorState, EguiNiceSettings, RepaintNotifier};
 use processor::{Processor, ProcessorParams};
 use std::sync::Arc;
 
+mod editor;
 mod processor;
 
 struct Resotool {
     params: Arc<ResotoolParams>,
     processor: Processor,
+    editor_state: Arc<EguiEditorState>,
+    repaint: RepaintNotifier,
+    // Handed to the host on the first `editor()` call
+    editor: Option<ResotoolEditor>,
 }
 
 #[derive(Params)]
@@ -32,9 +39,15 @@ struct ResotoolParams {
 
 impl Default for Resotool {
     fn default() -> Self {
+        let params = Arc::new(ResotoolParams::default());
+        let processor = Processor::new();
+        let editor = ResotoolEditor::new(params.clone(), processor.meters());
         Self {
-            params: Arc::new(ResotoolParams::default()),
-            processor: Processor::new(),
+            params,
+            processor,
+            editor_state: EguiEditorState::from_size(editor::WINDOW_SIZE, 1.0),
+            repaint: RepaintNotifier::new(),
+            editor: Some(editor),
         }
     }
 }
@@ -121,8 +134,7 @@ impl Plugin for Resotool {
 
     const SAMPLE_ACCURATE_AUTOMATION: bool = true;
 
-    // Plugins without an editor set this to `()`.
-    type Editor = ();
+    type Editor = EguiEditor<ResotoolEditor>;
     // If the plugin can send or receive SysEx messages, it can define a type to wrap around those
     // messages here. The type implements the `SysExMessage` trait, which allows conversion to and
     // from plain byte buffers.
@@ -134,6 +146,15 @@ impl Plugin for Resotool {
 
     fn params(&self) -> Arc<dyn Params> {
         self.params.clone()
+    }
+
+    fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Self::Editor> {
+        nice_plug_egui::create_egui_editor(
+            self.editor_state.clone(),
+            self.repaint.clone(),
+            EguiNiceSettings::new(),
+            self.editor.take()?,
+        )
     }
 
     fn activate(
@@ -196,6 +217,11 @@ impl Plugin for Resotool {
                 self.processor.audio.tick(&[*sample], output_buffer);
                 *sample = output_buffer[0];
             }
+        }
+
+        // Wake the GUI when voices sound, it animates itself from there
+        if self.editor_state.is_open() && self.processor.is_active() {
+            self.repaint.request_repaint();
         }
 
         ProcessStatus::Normal

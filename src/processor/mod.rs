@@ -1,10 +1,15 @@
 use fundsp::prelude32::*;
 use nice_plug::util::midi_key_to_freq;
+use std::sync::Arc;
 
 mod adsr;
+mod meter;
+
+pub use adsr::Stage;
+pub use meter::VoiceMeter;
 
 // Make sure to change these together
-const NUM_VOICES: usize = 8;
+pub const NUM_VOICES: usize = 8;
 type VoiceSize = U8;
 
 pub struct Processor {
@@ -62,6 +67,18 @@ impl Processor {
         self.voices[index].note_on(midi_note, self.clock);
     }
 
+    /// Per-voice meters for the GUI
+    pub fn meters(&self) -> [Arc<VoiceMeter>; NUM_VOICES] {
+        std::array::from_fn(|i| self.voices[i].meter.clone())
+    }
+
+    /// Whether any voice's envelope is sounding
+    pub fn is_active(&self) -> bool {
+        self.voices
+            .iter()
+            .any(|voice| voice.meter.stage() != Stage::Idle)
+    }
+
     pub fn note_off(&mut self, midi_note: u8) {
         self.clock += 1;
         for voice in self.voices.iter_mut() {
@@ -81,7 +98,7 @@ impl Processor {
             let voice = &voices[i as usize];
             (pass()
                 * (var(&voice.trigger)
-                    >> adsr::adsr_shared(adsr.clone()))
+                    >> adsr::adsr_shared(adsr.clone(), voice.meter.clone()))
                 | var(&voice.cutoff)
                 // The bandpass takes Q rather than bandwidth in Hz
                 | ((var(&voice.cutoff) | var(&bandwidth))
@@ -116,6 +133,7 @@ struct Voice {
     sounding: bool,
     trigger: Shared,
     cutoff: Shared,
+    meter: Arc<VoiceMeter>,
 }
 
 impl Default for Voice {
@@ -127,6 +145,7 @@ impl Default for Voice {
             sounding: false,
             trigger: Shared::new(0.0),
             cutoff: Shared::new(440.0),
+            meter: Arc::new(VoiceMeter::default()),
         }
     }
 }
@@ -136,7 +155,9 @@ impl Voice {
         self.trigger.set(1.0);
         self.note = Some(midi_note);
         self.sounding = true;
-        self.cutoff.set(midi_key_to_freq(midi_note));
+        let freq = midi_key_to_freq(midi_note);
+        self.cutoff.set(freq);
+        self.meter.set_freq(freq);
         self.last_played = last_played;
     }
 
