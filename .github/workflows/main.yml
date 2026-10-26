@@ -13,11 +13,20 @@ jobs:
 
     strategy:
       matrix:
-        os: [windows-latest, macos-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+            platform: windows
+          - os: macos-latest
+            platform: macos
+          - os: ubuntu-latest
+            platform: linux
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+      - name: Read Version
+        shell: bash
+        run: echo "VERSION=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name == "resotool") | .version')" >> "$GITHUB_ENV"
       - name: Import Certificates
         if: matrix.os == 'macos-latest'
         uses: apple-actions/import-codesign-certs@v2
@@ -36,5 +45,5 @@ jobs:
       - name: Create Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: resotool_${{ matrix.os }}
+          name: resotool_${{ matrix.platform }}_${{ env.VERSION }}
           path: ./target/bundled
