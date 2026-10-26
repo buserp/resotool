@@ -62,7 +62,7 @@ fn adsr_param(name: &str, default: f32) -> FloatParam {
             factor: 0.5,
         },
     )
-    .with_unit("seconds")
+    .with_unit(" seconds")
     .with_step_size(0.01)
     .with_value_to_string(formatters::v2s_f32_rounded(2))
 }
@@ -81,7 +81,7 @@ impl Default for ResotoolParams {
             )
             .with_step_size(0.01)
             .with_value_to_string(formatters::v2s_f32_rounded(2))
-            .with_unit("Hz"),
+            .with_unit(" Hz"),
             attack: adsr_param("Attack", 0.5),
             decay: adsr_param("Decay", 0.25),
             sustain: FloatParam::new("Sustain", 1.0, FloatRange::Linear { min: 0.0, max: 1.0 })
@@ -89,14 +89,14 @@ impl Default for ResotoolParams {
                 .with_value_to_string(formatters::v2s_f32_percentage(0))
                 .with_string_to_value(formatters::s2v_f32_percentage()),
             release: adsr_param("Release", 0.75),
-            wetdry: FloatParam::new("Wet/Dry", 0.75, FloatRange::Linear { min: 0.0, max: 1.0 })
+            wetdry: FloatParam::new("Wet/Dry", 0.9, FloatRange::Linear { min: 0.0, max: 1.0 })
                 .with_unit("%")
                 .with_value_to_string(formatters::v2s_f32_percentage(0))
                 .with_string_to_value(formatters::s2v_f32_percentage()),
             // Stored as linear gain, displayed in decibels
             makeup: FloatParam::new(
                 "Makeup",
-                util::db_to_gain(24.0),
+                util::db_to_gain(20.0),
                 FloatRange::gain_range(0.0, 48.0),
             )
             .with_unit(" dB")

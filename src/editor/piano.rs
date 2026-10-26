@@ -2,8 +2,8 @@ use super::{Voice, stage_color, x_of};
 use egui::{Rect, Sense, StrokeKind, Vec2};
 
 // Key centers in an octave, in white key widths
-// Black keys sit off-center, like on a real piano
-const KEY_CENTERS: [f32; 12] = [0.5, 0.9, 1.5, 2.1, 2.5, 3.5, 3.85, 4.5, 5.0, 5.5, 6.15, 6.5];
+// Black keys sit on the boundaries between white keys
+const KEY_CENTERS: [f32; 12] = [0.5, 1.0, 1.5, 2.0, 2.5, 3.5, 4.0, 4.5, 5.0, 5.5, 6.0, 6.5];
 // Black key size, relative to white
 const BLACK_WIDTH: f32 = 0.6;
 const BLACK_LENGTH: f32 = 0.65;

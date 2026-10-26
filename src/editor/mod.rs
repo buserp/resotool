@@ -112,7 +112,7 @@ impl ResotoolEditor {
             .show(ui, |ui| {
                 for row in [
                     [(&params.bandwidth, "Bandwidth"), (&params.attack, "Attack")],
-                    [(&params.makeup, "Makeup"), (&params.decay, "Decay")],
+                    [(&params.makeup, "Makeup Gain"), (&params.decay, "Decay")],
                     [(&params.wetdry, "Wet/dry"), (&params.sustain, "Sustain")],
                 ] {
                     for (param, label) in row {
